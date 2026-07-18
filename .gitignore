@@ -1,1 +1,4 @@
 doc/plan
+node_modules/
+.vivliostyle/
+doc/deployment-and-initial-setup.pdf

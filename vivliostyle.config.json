@@ -1,0 +1,13 @@
+{
+  "title": "デプロイ・初期実行手順",
+  "language": "ja",
+  "size": "A4",
+  "entry": "doc/deployment-and-initial-setup.md",
+  "theme": "doc/pdf.css",
+  "workspaceDir": ".vivliostyle",
+  "toc": {
+    "title": "目次",
+    "sectionDepth": 2
+  },
+  "output": "doc/deployment-and-initial-setup.pdf"
+}

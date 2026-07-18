@@ -1,0 +1,14 @@
+{
+  "name": "gmail-todo",
+  "private": true,
+  "scripts": {
+    "docs:pdf": "vivliostyle build -c vivliostyle.config.json"
+  },
+  "devDependencies": {
+    "@vivliostyle/cli": "11.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.26.2"
+}
