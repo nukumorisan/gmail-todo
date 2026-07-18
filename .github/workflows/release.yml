@@ -45,6 +45,12 @@ jobs:
           node --check dist/gas.js
           git diff --exit-code -- dist/gas.js
 
+      - name: 日本語フォントを設定
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes fonts-noto-cjk
+          fc-match "Noto Sans CJK JP" | grep --quiet "NotoSansCJK"
+
       - name: PDFを生成
         run: pnpm docs:pdf
 

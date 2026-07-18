@@ -12,7 +12,7 @@
 :root {
   color: #202124;
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
-    "Yu Gothic", "Noto Sans JP", sans-serif;
+    "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
   font-size: 10pt;
   line-height: 1.65;
 }
