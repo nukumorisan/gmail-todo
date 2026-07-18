@@ -1,4 +1,5 @@
 doc/plan
+tmp/
 node_modules/
 .vivliostyle/
 doc/deployment-and-initial-setup.pdf
