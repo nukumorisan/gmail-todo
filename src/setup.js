@@ -10,9 +10,10 @@
  * ・除外メールログ用スプレッドシートを作成または検証
  * ・旧除外メールログを移行
  * ・既存トリガーを削除
- * ・5分おきのトリガーを作成
+ * ・設定された間隔のトリガーを作成
  */
 function setup() {
+  addDefaultConfigProperties();
   validateConfiguration();
   getTargetTaskListId();
   const spreadsheet = ensureExcludedEmailSpreadsheet();
@@ -53,6 +54,56 @@ function validateConfiguration() {
       ].join('\n'),
     );
   }
+
+  // すべての利用者向け設定を読み込み、型と値を検証する。
+  CONFIG.EXCLUDED_SUBJECT_KEYWORDS;
+  CONFIG.GMAIL_SEARCH_QUERY;
+  CONFIG.GEMINI_MODEL;
+  CONFIG.TASK_LIST_TITLE;
+  CONFIG.TASK_TITLE_PREFIX;
+  CONFIG.INCLUDE_BODY_IN_TASK_NOTES;
+  CONFIG.TRIGGER_INTERVAL_MINUTES;
+}
+
+/**
+ * 存在しない利用者向け設定だけを初期値で追加する。
+ *
+ * @return {number} 追加したプロパティ数
+ */
+function addDefaultConfigProperties() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const existingProperties = scriptProperties.getProperties();
+  const propertiesToAdd = {};
+
+  Object.keys(CONFIG_PROPERTY_DEFAULTS).forEach(name => {
+    if (!Object.prototype.hasOwnProperty.call(existingProperties, name)) {
+      propertiesToAdd[name] = CONFIG_PROPERTY_DEFAULTS[name];
+    }
+  });
+
+  const addedPropertyNames = Object.keys(propertiesToAdd);
+
+  if (addedPropertyNames.length > 0) {
+    scriptProperties.setProperties(propertiesToAdd);
+    console.log(
+      `初期設定を${addedPropertyNames.length}件追加しました。`,
+    );
+  }
+
+  return addedPropertyNames.length;
+}
+
+/**
+ * 利用者向け設定をすべて初期値へ戻す。
+ * APIキーと内部管理用プロパティは変更しない。
+ */
+function resetConfigProperties() {
+  PropertiesService
+    .getScriptProperties()
+    .setProperties(CONFIG_PROPERTY_DEFAULTS);
+
+  console.log('設定を初期値へ戻しました。');
+  console.log('トリガーに反映するにはsetup()を実行してください。');
 }
 
 /**
