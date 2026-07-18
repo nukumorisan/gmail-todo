@@ -53,10 +53,16 @@ const CONFIG = {
   GMAIL_SEARCH_QUERY: 'in:inbox newer_than:2d',
 
   /**
-   * 1回の実行で確認する最大スレッド数。
-   * 5分ごとに動かすため、通常は20〜50程度で十分。
+   * 1回のGmail検索で取得する最大スレッド数。
+   * 検索結果が多い場合は、この件数ずつ続きへ進む。
    */
   MAX_THREADS_PER_RUN: 30,
+
+  /**
+   * 1回の実行でGemini APIを呼び出す最大回数。
+   * 無料枠の15 RPMを超えないようにする。
+   */
+  MAX_GEMINI_REQUESTS_PER_RUN: 15,
 
   /**
    * Geminiへ渡すメール本文の最大文字数。
@@ -224,80 +230,112 @@ function processEmails() {
     const excludedEmailLogs = [];
     const taskListId = getTargetTaskListId();
 
-    const threads = GmailApp.search(
-      CONFIG.GMAIL_SEARCH_QUERY,
-      0,
-      CONFIG.MAX_THREADS_PER_RUN,
-    );
-
     let checkedCount = 0;
     let excludedCount = 0;
     let taskCreatedCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
+    let geminiRequestCount = 0;
+    let geminiRequestLimitReached = false;
+    let geminiRateLimitReached = false;
+    let searchStart = 0;
 
-    for (const thread of threads) {
-      const messages = thread.getMessages();
+    searchLoop:
+    while (true) {
+      const threads = GmailApp.search(
+        CONFIG.GMAIL_SEARCH_QUERY,
+        searchStart,
+        CONFIG.MAX_THREADS_PER_RUN,
+      );
 
-      for (const message of messages) {
-        const messageId = message.getId();
+      if (threads.length === 0) {
+        break;
+      }
 
-        if (processedMessages[messageId]) {
-          skippedCount++;
-          continue;
-        }
+      for (const thread of threads) {
+        const messages = thread.getMessages();
 
-        checkedCount++;
+        for (const message of messages) {
+          const messageId = message.getId();
 
-        try {
-          const subject = message.getSubject() || '(件名なし)';
-          const excludedKeyword = findExcludedSubjectKeyword(subject);
-
-          if (excludedKeyword) {
-            excludedCount++;
-            excludedEmailLogs.push(
-              createExcludedEmailLog(
-                message,
-                `EXCLUDED_SUBJECT_KEYWORDSの「${excludedKeyword}」に引っかかった`,
-              ),
-            );
-            markAsProcessed(processedMessages, messageId);
+          if (processedMessages[messageId]) {
+            skippedCount++;
             continue;
           }
 
-          const emailData = createEmailData(message);
-          const judgment = judgeEmailWithGemini(emailData);
+          checkedCount++;
 
-          if (judgment.shouldCreateTask) {
-            createGoogleTask(taskListId, emailData, judgment);
-            taskCreatedCount++;
-          } else {
-            excludedCount++;
-            excludedEmailLogs.push(
-              createExcludedEmailLog(
-                message,
-                `AIによる判定: ${judgment.reason || 'TODO作成不要と判定された'}`,
-              ),
+          try {
+            const subject = message.getSubject() || '(件名なし)';
+            const excludedKeyword = findExcludedSubjectKeyword(subject);
+
+            if (excludedKeyword) {
+              excludedCount++;
+              excludedEmailLogs.push(
+                createExcludedEmailLog(
+                  message,
+                  `EXCLUDED_SUBJECT_KEYWORDSの「${excludedKeyword}」に引っかかった`,
+                ),
+              );
+              markAsProcessed(processedMessages, messageId);
+              continue;
+            }
+
+            if (
+              geminiRequestCount >=
+              CONFIG.MAX_GEMINI_REQUESTS_PER_RUN
+            ) {
+              checkedCount--;
+              geminiRequestLimitReached = true;
+              break searchLoop;
+            }
+
+            const emailData = createEmailData(message);
+            geminiRequestCount++;
+            const judgment = judgeEmailWithGemini(emailData);
+
+            if (judgment.shouldCreateTask) {
+              createGoogleTask(taskListId, emailData, judgment);
+              taskCreatedCount++;
+            } else {
+              excludedCount++;
+              excludedEmailLogs.push(
+                createExcludedEmailLog(
+                  message,
+                  `AIによる判定: ${judgment.reason || 'TODO作成不要と判定された'}`,
+                ),
+              );
+            }
+
+            /*
+             * TODO対象外だった場合も処理済みにする。
+             * これにより5分後に同じメールを再判定しない。
+             */
+            markAsProcessed(processedMessages, messageId);
+          } catch (error) {
+            errorCount++;
+
+            /*
+             * エラーになったメールは処理済みにしない。
+             * 一時的なAPIエラーなら次回再試行される。
+             */
+            console.error(
+              `メール処理中にエラーが発生しました。messageId=${messageId}`,
+              error,
             );
+
+            if (error?.geminiStatusCode === 429) {
+              geminiRateLimitReached = true;
+              break searchLoop;
+            }
           }
-
-          /*
-           * TODO対象外だった場合も処理済みにする。
-           * これにより5分後に同じメールを再判定しない。
-           */
-          markAsProcessed(processedMessages, messageId);
-        } catch (error) {
-          errorCount++;
-
-          /*
-           * エラーになったメールは処理済みにしない。
-           * 一時的なAPIエラーなら次回再試行される。
-           */
-          console.error(
-            `メール処理中にエラーが発生しました。messageId=${messageId}`,
-            error,
-          );
         }
+      }
+
+      searchStart += threads.length;
+
+      if (threads.length < CONFIG.MAX_THREADS_PER_RUN) {
+        break;
       }
     }
 
@@ -311,6 +349,9 @@ function processEmails() {
       taskCreatedCount,
       skippedCount,
       errorCount,
+      geminiRequestCount,
+      geminiRequestLimitReached,
+      geminiRateLimitReached,
     });
   } finally {
     lock.releaseLock();
@@ -514,9 +555,11 @@ ${email.body}
   const responseText = response.getContentText();
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(
+    const error = new Error(
       `Gemini API error (${statusCode}): ${responseText}`,
     );
+    error.geminiStatusCode = statusCode;
+    throw error;
   }
 
   const responseData = JSON.parse(responseText);

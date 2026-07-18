@@ -53,10 +53,16 @@ const CONFIG = {
   GMAIL_SEARCH_QUERY: 'in:inbox newer_than:2d',
 
   /**
-   * 1回の実行で確認する最大スレッド数。
-   * 5分ごとに動かすため、通常は20〜50程度で十分。
+   * 1回のGmail検索で取得する最大スレッド数。
+   * 検索結果が多い場合は、この件数ずつ続きへ進む。
    */
   MAX_THREADS_PER_RUN: 30,
+
+  /**
+   * 1回の実行でGemini APIを呼び出す最大回数。
+   * 無料枠の15 RPMを超えないようにする。
+   */
+  MAX_GEMINI_REQUESTS_PER_RUN: 15,
 
   /**
    * Geminiへ渡すメール本文の最大文字数。

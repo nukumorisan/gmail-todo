@@ -137,9 +137,11 @@ ${email.body}
   const responseText = response.getContentText();
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(
+    const error = new Error(
       `Gemini API error (${statusCode}): ${responseText}`,
     );
+    error.geminiStatusCode = statusCode;
+    throw error;
   }
 
   const responseData = JSON.parse(responseText);
@@ -171,4 +173,3 @@ ${email.body}
     reason: String(result.reason || '').trim(),
   };
 }
-
