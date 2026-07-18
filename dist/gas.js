@@ -29,8 +29,8 @@ const CONFIG_PROPERTY_DEFAULTS = Object.freeze({
   ]),
   GMAIL_SEARCH_QUERY: 'in:inbox newer_than:2d',
   GEMINI_MODEL: 'gemini-3.1-flash-lite',
-  TASK_LIST_TITLE: '',
-  TASK_TITLE_PREFIX: '',
+  TASK_LIST_TITLE: 'null',
+  TASK_TITLE_PREFIX: 'null',
   INCLUDE_BODY_IN_TASK_NOTES: 'true',
   TRIGGER_INTERVAL_MINUTES: '5',
 });
@@ -102,7 +102,7 @@ const CONFIG = {
   /**
    * Google Tasksの追加先リスト名。
    *
-   * null:
+   * スクリプトプロパティの null:
    *   最初に見つかったタスクリストを使用
    */
   get TASK_LIST_TITLE() {
@@ -111,10 +111,10 @@ const CONFIG = {
 
   /**
    * TODOタイトルの先頭に付ける文字列。
-   * 不要なら空文字にする。
+   * 不要ならスクリプトプロパティに null を指定する。
    */
   get TASK_TITLE_PREFIX() {
-    return getConfigProperty('TASK_TITLE_PREFIX');
+    return getNullableStringConfigProperty('TASK_TITLE_PREFIX') ?? '';
   },
 
   /**
@@ -173,7 +173,7 @@ function getRequiredStringConfigProperty(name) {
 
 function getNullableStringConfigProperty(name) {
   const value = getConfigProperty(name);
-  return value === '' ? null : value;
+  return value === '' || value === 'null' ? null : value;
 }
 
 function getStringArrayConfigProperty(name) {
@@ -291,6 +291,7 @@ function validateConfiguration() {
 
 /**
  * 存在しない利用者向け設定だけを初期値で追加する。
+ * 旧形式の空文字は、同じ意味の null へ移行する。
  *
  * @return {number} 追加したプロパティ数
  */
@@ -298,6 +299,7 @@ function addDefaultConfigProperties() {
   const scriptProperties = PropertiesService.getScriptProperties();
   const existingProperties = scriptProperties.getProperties();
   const propertiesToAdd = {};
+  const propertiesToMigrate = {};
 
   Object.keys(CONFIG_PROPERTY_DEFAULTS).forEach(name => {
     if (!Object.prototype.hasOwnProperty.call(existingProperties, name)) {
@@ -306,11 +308,29 @@ function addDefaultConfigProperties() {
   });
 
   const addedPropertyNames = Object.keys(propertiesToAdd);
+  ['TASK_LIST_TITLE', 'TASK_TITLE_PREFIX'].forEach(name => {
+    if (existingProperties[name] === '') {
+      propertiesToMigrate[name] = CONFIG_PROPERTY_DEFAULTS[name];
+    }
+  });
+  const migratedPropertyNames = Object.keys(propertiesToMigrate);
+
+  if (addedPropertyNames.length > 0 || migratedPropertyNames.length > 0) {
+    scriptProperties.setProperties({
+      ...propertiesToAdd,
+      ...propertiesToMigrate,
+    });
+  }
 
   if (addedPropertyNames.length > 0) {
-    scriptProperties.setProperties(propertiesToAdd);
     console.log(
       `初期設定を${addedPropertyNames.length}件追加しました。`,
+    );
+  }
+
+  if (migratedPropertyNames.length > 0) {
+    console.log(
+      `空の設定値を${migratedPropertyNames.length}件移行しました。`,
     );
   }
 

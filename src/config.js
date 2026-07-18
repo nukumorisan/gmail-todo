@@ -29,8 +29,8 @@ const CONFIG_PROPERTY_DEFAULTS = Object.freeze({
   ]),
   GMAIL_SEARCH_QUERY: 'in:inbox newer_than:2d',
   GEMINI_MODEL: 'gemini-3.1-flash-lite',
-  TASK_LIST_TITLE: '',
-  TASK_TITLE_PREFIX: '',
+  TASK_LIST_TITLE: 'null',
+  TASK_TITLE_PREFIX: 'null',
   INCLUDE_BODY_IN_TASK_NOTES: 'true',
   TRIGGER_INTERVAL_MINUTES: '5',
 });
@@ -102,7 +102,7 @@ const CONFIG = {
   /**
    * Google Tasksの追加先リスト名。
    *
-   * null:
+   * スクリプトプロパティの null:
    *   最初に見つかったタスクリストを使用
    */
   get TASK_LIST_TITLE() {
@@ -111,10 +111,10 @@ const CONFIG = {
 
   /**
    * TODOタイトルの先頭に付ける文字列。
-   * 不要なら空文字にする。
+   * 不要ならスクリプトプロパティに null を指定する。
    */
   get TASK_TITLE_PREFIX() {
-    return getConfigProperty('TASK_TITLE_PREFIX');
+    return getNullableStringConfigProperty('TASK_TITLE_PREFIX') ?? '';
   },
 
   /**
@@ -173,7 +173,7 @@ function getRequiredStringConfigProperty(name) {
 
 function getNullableStringConfigProperty(name) {
   const value = getConfigProperty(name);
-  return value === '' ? null : value;
+  return value === '' || value === 'null' ? null : value;
 }
 
 function getStringArrayConfigProperty(name) {
